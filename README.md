@@ -84,6 +84,29 @@ While the script handles most configurations, you can manually tune settings in 
 
 ---
 
+## 📧 Email (SMTP) Configuration
+
+To enable features like **Registration OTP** and **Login OTP**, you must configure your SMTP server settings in the `.env` file. 
+
+1. Open the `.env` file: `nano .env`
+2. Update the following fields:
+
+| Variable | Example Value | Description |
+| :--- | :--- | :--- |
+| `SMTP_HOST` | `smtp.gmail.com` | Your SMTP provider's hostname. |
+| `SMTP_PORT` | `587` | Port (usually 587 for TLS or 465 for SSL). |
+| `SMTP_USER` | `notifications@yourdomain.com` | Your SMTP username/email. |
+| `SMTP_PASS` | `your-app-password` | Your SMTP password or App Password. |
+| `SMTP_SECURE` | `false` | Set to `true` for Port 465, `false` for Port 587 (STARTTLS). |
+| `EMAIL_FROM` | `"Snapsec Notifications" <noreply@yourdomain.com>` | The sender address used for emails. |
+
+3. After saving, restart the services:
+```bash
+./setup.sh update
+```
+
+---
+
 ## 🛡️ Security Best Practices
 
 1.  **Restrict Access:** Ensure port `80` (or `443` if using a proxy) is only accessible from your authorized networks.
