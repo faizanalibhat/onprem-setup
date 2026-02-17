@@ -1,0 +1,330 @@
+version: "3.8"
+
+services:
+    mongodb:
+        image: mongo:latest
+        env_file: .env
+        mem_limit: 8g
+        cpus: 2
+        volumes:
+            - mongodb_data:/data/db
+            - ./mongo-init:/docker-entrypoint-initdb.d
+        environment:
+            - MONGO_INITDB_ROOT_USERNAME=${MONGODB_USER}
+            - MONGO_INITDB_ROOT_PASSWORD=${MONGODB_PASS}
+        healthcheck:
+            test: mongosh -u ${MONGODB_USER} -p ${MONGODB_PASS} --authenticationDatabase admin --eval 'db.runCommand("ping").ok' --quiet
+            interval: 10s
+            timeout: 10s
+            retries: 5
+        networks:
+            - backend
+
+    redis:
+        image: redis:alpine
+        command: redis-server --replica-read-only no
+        mem_limit: 2g
+        cpus: 2
+        volumes:
+            - redis_data:/data
+        environment:
+            - REDIS_PASSWORD=${REDIS_PASS}
+        healthcheck:
+            test: ["CMD", "redis-cli", "-a", "${REDIS_PASS}", "ping"]
+            interval: 10s
+            timeout: 10s
+            retries: 5
+        networks:
+            - backend
+
+    ui:
+        image: ghcr.io/faizanalibhat/ui:master
+        mem_limit: 2g
+        cpus: 2
+        ports:
+            - "80:80"
+        env_file: .env
+        networks:
+            - backend
+        depends_on:
+            - auth
+            - vm
+            - apisec
+            - op
+            - aim
+            - tm
+            - vs
+            - util
+            - asset-inventory
+            - cmdexec
+            - notify
+            - vscanner
+
+    auth:
+        image: ghcr.io/faizanalibhat/auth:master
+        env_file: .env
+        mem_limit: 2g
+        cpus: 2
+        volumes:
+            - ./keys:/app/keys
+            - snapsec_data:/data
+        depends_on:
+            mongodb:
+                condition: service_healthy
+        networks:
+            - backend
+
+    vs:
+        image: ghcr.io/faizanalibhat/vs:master
+        env_file: .env
+        mem_limit: 2g
+        cpus: 2
+        volumes:
+            - ./keys:/app/keys
+            - snapsec_data:/data
+        depends_on:
+            mongodb:
+                condition: service_healthy
+        networks:
+            - backend
+
+    admin:
+        image: ghcr.io/faizanalibhat/admin:master
+        env_file: .env
+        mem_limit: 1g
+        cpus: 1
+        volumes:
+            - ./keys:/app/keys
+            - snapsec_data:/data
+        depends_on:
+            mongodb:
+                condition: service_healthy
+        networks:
+            - backend
+
+    apisec:
+        image: ghcr.io/faizanalibhat/apisec:master
+        env_file: .env
+        mem_limit: 4g
+        cpus: 3
+        volumes:
+            - ./keys:/app/keys
+            - snapsec_data:/data
+        depends_on:
+            mongodb:
+                condition: service_healthy
+        networks:
+            - backend
+
+    asset-inventory:
+        image: ghcr.io/faizanalibhat/asset-inventory:master
+        env_file: .env
+        mem_limit: 2g
+        cpus: 2
+        volumes:
+            - ./keys:/app/keys
+            - snapsec_data:/data
+        depends_on:
+            mongodb:
+                condition: service_healthy
+        networks:
+            - backend
+
+    vscanner:
+        image: ghcr.io/faizanalibhat/vscanner:master
+        env_file: .env
+        mem_limit: 4g
+        cpus: 2
+        volumes:
+            - ./keys:/app/keys
+            - snapsec_data:/data
+        depends_on:
+            mongodb:
+                condition: service_healthy
+        networks:
+            - backend
+
+    cmdexec:
+        image: ghcr.io/faizanalibhat/cmdexec:master
+        mem_limit: 3g
+        cpus: 2
+        env_file: .env
+        volumes:
+            - ./keys:/app/keys
+            - snapsec_data:/data
+        depends_on:
+            mongodb:
+                condition: service_healthy
+        networks:
+            - backend
+
+    rabbitmq:
+        image: rabbitmq:3-management
+        container_name: rabbitmq
+        mem_limit: 3g
+        cpus: 2
+        environment:
+            RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+            RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+        volumes:
+            - rabbitmq_data:/var/lib/rabbitmq
+        networks:
+            - backend
+
+    notify:
+        image: ghcr.io/faizanalibhat/notify:master
+        env_file: .env
+        mem_limit: 2g
+        cpus: 2
+        volumes:
+            - ./keys:/app/keys
+            - snapsec_data:/data
+        depends_on:
+            mongodb:
+                condition: service_healthy
+        networks:
+            - backend
+
+    aim:
+        image: ghcr.io/faizanalibhat/aim:master
+        env_file: .env
+        mem_limit: 4g
+        cpus: 2
+        volumes:
+            - ./keys:/app/keys
+            - snapsec_data:/data
+        security_opt:
+            - seccomp=unconfined
+        cap_add:
+            - SYS_ADMIN
+        shm_size: "2gb"
+        environment:
+            - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+            - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+        depends_on:
+            mongodb:
+                condition: service_healthy
+        networks:
+            - backend
+
+    op:
+        image: ghcr.io/faizanalibhat/op:master
+        env_file: .env
+        mem_limit: 2g
+        cpus: 2
+        volumes:
+            - "./keys:/app/keys"
+            - "snapsec_data:/data"
+        depends_on:
+            mongodb:
+                condition: service_healthy
+        networks:
+            - backend
+
+    util:
+        image: ghcr.io/faizanalibhat/util:master
+        env_file: .env
+        mem_limit: 2g
+        cpus: 2
+        volumes:
+            - ./keys:/app/keys
+            - snapsec_data:/data
+        depends_on:
+            mongodb:
+                condition: service_healthy
+        networks:
+            - backend
+
+    tm:
+        image: ghcr.io/faizanalibhat/tm:master
+        env_file: .env
+        mem_limit: 2g
+        cpus: 2
+        volumes:
+            - ./keys:/app/keys
+            - snapsec_data:/data
+        depends_on:
+            mongodb:
+                condition: service_healthy
+        networks:
+            - backend
+
+    vm:
+        image: ghcr.io/faizanalibhat/vm:master
+        env_file: .env
+        mem_limit: 4g
+        cpus: 3
+        volumes:
+            - ./keys:/app/keys
+            - snapsec_data:/data
+        depends_on:
+            mongodb:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+        networks:
+            - backend
+
+    gotenberg:
+        image: gotenberg/gotenberg:8
+        env_file: .env
+        mem_limit: 2g
+        cpus: 2
+        environment:
+            API_TIMEOUT: "600s"
+            CHROMIUM_TIMEOUT: "600s"
+            CHROMIUM_WAIT_DELAY: "15000"
+            CHROMIUM_WAIT_FOR_NAVIGATION: "true"
+        networks:
+            - backend
+
+    otel-agent:
+        image: otel/opentelemetry-collector-contrib:0.130.1
+        restart: unless-stopped
+
+        mem_limit: 2g
+        cpus: 2
+
+        # Run as root (same as --user 0:0)
+        user: "0:0"
+
+        # Same as --network host
+        network_mode: host
+
+        # Same as --pid host
+        pid: host
+
+        volumes:
+            # Host filesystem (for hostmetrics, process, etc.)
+            - /proc:/hostfs/proc:ro
+            - /sys:/hostfs/sys:ro
+            - /:/hostfs:ro
+
+            # Collector config
+            - ./configs/otel-agent-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+
+        environment:
+            HOST_PROC: /hostfs/proc
+            HOST_SYS: /hostfs/sys
+            HOST_ROOT: /hostfs
+
+        command:
+            - "--config=/etc/otelcol-contrib/config.yaml"
+
+volumes:
+    mongodb_data:
+        name: snapsec_mongodb_data_prod
+    redis_data:
+        name: snapsec_redis_data_prod
+    build_data:
+        name: snapsec_build_data_prod
+    rabbitmq_data:
+        name: snapsec_rabbitmq_data
+    dozzle:
+        name: snapsec_dozzle
+    snapsec_data:
+
+networks:
+    backend:
+        name: snapsec_network_prod
+        driver: bridge
