@@ -88,20 +88,6 @@ services:
         networks:
             - backend
 
-    admin:
-        image: ghcr.io/faizanalibhat/admin:master
-        env_file: .env
-        mem_limit: 1g
-        cpus: 1
-        volumes:
-            - ./keys:/app/keys
-            - snapsec_data:/data
-        depends_on:
-            mongodb:
-                condition: service_healthy
-        networks:
-            - backend
-
     apisec:
         image: ghcr.io/faizanalibhat/apisec:master
         env_file: .env
