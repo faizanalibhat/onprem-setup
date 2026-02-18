@@ -195,6 +195,25 @@ setup_env() {
     log_success "Environment configuration updated in $ENV_FILE."
 }
 
+setup_keys() {
+    log_step "Generating security keys..."
+    local keys_dir="keys"
+    
+    if [[ ! -d "$keys_dir" ]]; then
+        log_info "Creating $keys_dir directory..."
+        mkdir -p "$keys_dir"
+    fi
+
+    if [[ -f "$keys_dir/private.pem" && -f "$keys_dir/public.pem" ]]; then
+        log_info "Security keys already exist."
+    else
+        log_info "Generating RSA private and public keys..."
+        openssl genrsa -out "$keys_dir/private.pem" 2048
+        openssl rsa -in "$keys_dir/private.pem" -pubout -out "$keys_dir/public.pem"
+        log_success "Security keys generated successfully."
+    fi
+}
+
 # --- Module: Cron Job ---
 setup_cron() {
     log_step "Scheduling weekly maintenance..."
@@ -289,6 +308,7 @@ handle_install() {
     
     check_dependencies
     setup_env
+    setup_keys
     
     log_step "Telemetry Opt-in"
     local telemetry_pref=""
