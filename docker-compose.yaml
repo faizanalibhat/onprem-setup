@@ -155,6 +155,20 @@ services:
         networks:
             - snapsec_network_prod
 
+    risk-register:
+        image: ghcr.io/faizanalibhat/risk-register:master
+        env_file: .env
+        mem_limit: 2g
+        cpus: 2
+        volumes:
+            - ./keys:/app/keys
+            - snapsec_data:/data
+        depends_on:
+            mongodb:
+                condition: service_healthy
+        networks:
+            - snapsec_network_prod
+
     notify:
         image: ghcr.io/faizanalibhat/notify:master
         env_file: .env
