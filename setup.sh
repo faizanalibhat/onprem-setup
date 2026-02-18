@@ -273,13 +273,22 @@ ensure_registry_auth() {
 
 handle_install() {
     print_banner
+    
+    if [[ -f "$INSTALL_FILE" ]]; then
+        log_warn "Application is already installed."
+        if confirm "Re-installing will remove all images and start fresh. Continue?" "n"; then
+            log_info "Removing existing infrastructure and images..."
+            docker-compose down --rmi all
+        else
+            log_info "Aborting installation."
+            exit 0
+        fi
+    fi
+
     log_info "Starting fresh installation..."
     
     check_dependencies
     setup_env
-    
-    log_step "Key Generation"
-    # Optional logic for other keys if needed
     
     log_step "Telemetry Opt-in"
     local telemetry_pref=""
@@ -311,6 +320,9 @@ handle_install() {
         exit 1
     fi
     
+    log_info "Ensuring infrastructure is stopped before starting..."
+    docker-compose down 2>/dev/null || true
+
     log_info "Starting services in detached mode..."
     if ! docker-compose up -d; then
         log_error "Failed to start services."
@@ -333,22 +345,46 @@ handle_update() {
     ensure_registry_auth
 
     log_step "Fetching Updates"
-    # Uncomment if git is used
-    # if [[ -d ".git" ]]; then
-    #     log_info "Pulling latest changes from repository..."
-    #     git pull
-    # fi
-    
     log_info "Updating container images..."
     if ! docker-compose pull; then
         log_error "Failed to pull updated images."
         exit 1
     fi
     
+    log_info "Ensuring infrastructure is stopped before restarting..."
+    docker-compose down 2>/dev/null || true
+
     log_step "Restarting Services"
     docker-compose up -d --remove-orphans
     
+    log_step "Cleaning up old images"
+    docker image prune -f
+    
     log_success "Application updated successfully! ${STAR}"
+}
+
+handle_start() {
+    print_banner
+    check_is_installed
+    log_info "Starting infrastructure..."
+    
+    log_info "Ensuring infrastructure is stopped before starting..."
+    docker-compose down 2>/dev/null || true
+    
+    log_step "Starting services"
+    if ! docker-compose up -d; then
+        log_error "Failed to start services."
+        exit 1
+    fi
+    log_success "Infrastructure started successfully! ${STAR}"
+}
+
+handle_stop() {
+    print_banner
+    check_is_installed
+    log_info "Stopping infrastructure..."
+    docker-compose down
+    log_success "Infrastructure stopped successfully! ${NC}"
 }
 
 # --- Main CLI Router ---
@@ -360,6 +396,8 @@ show_help() {
     echo -e "${BOLD}Commands:${NC}"
     echo "  install          Run the interactive installation process"
     echo "  update           Update the application and restart services"
+    echo "  start            Start the infrastructure services"
+    echo "  stop             Stop the infrastructure services"
     echo ""
     echo -e "${BOLD}Options:${NC}"
     echo "  --no-telemetry   Disable telemetry (non-interactive install)"
@@ -373,7 +411,7 @@ TELEMETRY_CHOICE=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        install|update)
+        install|update|start|stop)
             COMMAND="$1"
             shift
             ;;
@@ -409,6 +447,12 @@ case "$COMMAND" in
         ;;
     update)
         handle_update
+        ;;
+    start)
+        handle_start
+        ;;
+    stop)
+        handle_stop
         ;;
     *)
         log_error "Unknown command: $COMMAND"
