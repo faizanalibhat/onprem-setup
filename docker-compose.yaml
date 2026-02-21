@@ -183,28 +183,6 @@ services:
         networks:
             - snapsec_network_prod
 
-    aim:
-        image: ghcr.io/faizanalibhat/aim:master
-        env_file: .env
-        mem_limit: 4g
-        cpus: 2
-        volumes:
-            - ./keys:/app/keys
-            - snapsec_data:/data
-        security_opt:
-            - seccomp=unconfined
-        cap_add:
-            - SYS_ADMIN
-        shm_size: "2gb"
-        environment:
-            - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-            - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
-        depends_on:
-            mongodb:
-                condition: service_healthy
-        networks:
-            - snapsec_network_prod
-
     op:
         image: ghcr.io/faizanalibhat/op:master
         env_file: .env
