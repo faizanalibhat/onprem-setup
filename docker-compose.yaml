@@ -49,7 +49,6 @@ services:
             - vm
             - apisec
             - op
-            - aim
             - tm
             - vs
             - util
