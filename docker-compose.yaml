@@ -263,9 +263,6 @@ services:
         # Run as root (same as --user 0:0)
         user: "0:0"
 
-        # Same as --network host
-        network_mode: host
-
         # Same as --pid host
         pid: host
 
@@ -285,6 +282,10 @@ services:
 
         command:
             - "--config=/etc/otelcol-contrib/config.yaml"
+
+        networks:
+            - snapsec_network_prod
+
 
 volumes:
     mongodb_data:
