@@ -35,6 +35,21 @@ services:
         networks:
             - snapsec_network_prod
 
+
+    migration-service:
+        image: ghcr.io/faizanalibhat/migration-service:master
+        env_file: .env
+        mem_limit: 2g
+        cpus: 2
+        volumes:
+            - ./keys:/app/keys
+            - snapsec_data:/data
+        depends_on:
+            mongodb:
+                condition: service_healthy
+        networks:
+            - snapsec_network_prod
+
     ui:
         image: ghcr.io/faizanalibhat/ui:master
         mem_limit: 2g
