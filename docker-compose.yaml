@@ -34,6 +34,8 @@ services:
             retries: 5
         networks:
             - snapsec_network_prod
+    
+    
 
 
     migration-service:
@@ -131,8 +133,8 @@ services:
     vscanner:
         image: ghcr.io/faizanalibhat/vscanner:master
         env_file: .env
-        mem_limit: 4g
-        cpus: 2
+        mem_limit: 6g
+        cpus: 3
         volumes:
             - ./keys:/app/keys
             - snapsec_data:/data
