@@ -1,6 +1,7 @@
 services:
     mongodb:
         image: mongo:latest
+        restart: unless-stopped
         env_file: .env
         mem_limit: 8g
         cpus: 2
@@ -11,15 +12,17 @@ services:
             - MONGO_INITDB_ROOT_USERNAME=${MONGODB_USER}
             - MONGO_INITDB_ROOT_PASSWORD=${MONGODB_PASS}
         healthcheck:
-            test: mongosh -u ${MONGODB_USER} -p ${MONGODB_PASS} --authenticationDatabase admin --eval 'db.runCommand("ping").ok' --quiet
-            interval: 10s
-            timeout: 10s
-            retries: 5
+            test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/27017"]
+            interval: 30s
+            timeout: 5s
+            retries: 3
+            start_period: 20s
         networks:
             - snapsec_network_prod
 
     redis:
         image: redis:alpine
+        restart: unless-stopped
         command: redis-server --replica-read-only no
         mem_limit: 2g
         cpus: 2
@@ -29,9 +32,9 @@ services:
             - REDIS_PASSWORD=${REDIS_PASS}
         healthcheck:
             test: ["CMD", "redis-cli", "-a", "${REDIS_PASS}", "ping"]
-            interval: 10s
-            timeout: 10s
-            retries: 5
+            interval: 30s
+            timeout: 5s
+            retries: 3
         networks:
             - snapsec_network_prod
     
@@ -40,6 +43,7 @@ services:
 
     migration-service:
         image: ghcr.io/faizanalibhat/migration-service:master
+        restart: unless-stopped
         env_file: .env
         mem_limit: 2g
         cpus: 2
@@ -47,13 +51,13 @@ services:
             - ./keys:/app/keys
             - snapsec_data:/data
         depends_on:
-            mongodb:
-                condition: service_healthy
+            - mongodb
         networks:
             - snapsec_network_prod
 
     ui:
         image: ghcr.io/faizanalibhat/ui:master
+        restart: unless-stopped
         mem_limit: 2g
         cpus: 2
         ports:
@@ -76,6 +80,7 @@ services:
 
     auth:
         image: ghcr.io/faizanalibhat/auth:master
+        restart: unless-stopped
         env_file: .env
         mem_limit: 2g
         cpus: 2
@@ -83,13 +88,13 @@ services:
             - ./keys:/app/keys
             - snapsec_data:/data
         depends_on:
-            mongodb:
-                condition: service_healthy
+            - mongodb
         networks:
             - snapsec_network_prod
 
     vs:
         image: ghcr.io/faizanalibhat/vs:master
+        restart: unless-stopped
         env_file: .env
         mem_limit: 2g
         cpus: 2
@@ -97,13 +102,13 @@ services:
             - ./keys:/app/keys
             - snapsec_data:/data
         depends_on:
-            mongodb:
-                condition: service_healthy
+            - mongodb
         networks:
             - snapsec_network_prod
 
     apisec:
         image: ghcr.io/faizanalibhat/apisec:master
+        restart: unless-stopped
         env_file: .env
         mem_limit: 4g
         cpus: 3
@@ -111,13 +116,13 @@ services:
             - ./keys:/app/keys
             - snapsec_data:/data
         depends_on:
-            mongodb:
-                condition: service_healthy
+            - mongodb
         networks:
             - snapsec_network_prod
 
     asset-inventory:
         image: ghcr.io/faizanalibhat/asset-inventory:master
+        restart: unless-stopped
         env_file: .env
         mem_limit: 2g
         cpus: 2
@@ -125,13 +130,13 @@ services:
             - ./keys:/app/keys
             - snapsec_data:/data
         depends_on:
-            mongodb:
-                condition: service_healthy
+            - mongodb
         networks:
             - snapsec_network_prod
 
     vscanner:
         image: ghcr.io/faizanalibhat/vscanner:master
+        restart: unless-stopped
         env_file: .env
         mem_limit: 6g
         cpus: 3
@@ -139,13 +144,13 @@ services:
             - ./keys:/app/keys
             - snapsec_data:/data
         depends_on:
-            mongodb:
-                condition: service_healthy
+            - mongodb
         networks:
             - snapsec_network_prod
 
     cmdexec:
         image: ghcr.io/faizanalibhat/cmdexec:master
+        restart: unless-stopped
         mem_limit: 3g
         cpus: 2
         env_file: .env
@@ -153,14 +158,14 @@ services:
             - ./keys:/app/keys
             - snapsec_data:/data
         depends_on:
-            mongodb:
-                condition: service_healthy
+            - mongodb
         networks:
             - snapsec_network_prod
 
     rabbitmq:
         image: rabbitmq:3-management
         container_name: rabbitmq
+        restart: unless-stopped
         mem_limit: 3g
         cpus: 2
         environment:
@@ -173,6 +178,7 @@ services:
 
     risk-register:
         image: ghcr.io/faizanalibhat/risk-register:master
+        restart: unless-stopped
         env_file: .env
         mem_limit: 2g
         cpus: 2
@@ -180,13 +186,13 @@ services:
             - ./keys:/app/keys
             - snapsec_data:/data
         depends_on:
-            mongodb:
-                condition: service_healthy
+            - mongodb
         networks:
             - snapsec_network_prod
 
     notify:
         image: ghcr.io/faizanalibhat/notify:master
+        restart: unless-stopped
         env_file: .env
         mem_limit: 2g
         cpus: 2
@@ -194,13 +200,13 @@ services:
             - ./keys:/app/keys
             - snapsec_data:/data
         depends_on:
-            mongodb:
-                condition: service_healthy
+            - mongodb
         networks:
             - snapsec_network_prod
 
     op:
         image: ghcr.io/faizanalibhat/op:master
+        restart: unless-stopped
         env_file: .env
         mem_limit: 2g
         cpus: 2
@@ -208,13 +214,13 @@ services:
             - "./keys:/app/keys"
             - "snapsec_data:/data"
         depends_on:
-            mongodb:
-                condition: service_healthy
+            - mongodb
         networks:
             - snapsec_network_prod
 
     util:
         image: ghcr.io/faizanalibhat/util:master
+        restart: unless-stopped
         env_file: .env
         mem_limit: 2g
         cpus: 2
@@ -222,13 +228,13 @@ services:
             - ./keys:/app/keys
             - snapsec_data:/data
         depends_on:
-            mongodb:
-                condition: service_healthy
+            - mongodb
         networks:
             - snapsec_network_prod
 
     tm:
         image: ghcr.io/faizanalibhat/tm:master
+        restart: unless-stopped
         env_file: .env
         mem_limit: 2g
         cpus: 2
@@ -236,13 +242,13 @@ services:
             - ./keys:/app/keys
             - snapsec_data:/data
         depends_on:
-            mongodb:
-                condition: service_healthy
+            - mongodb
         networks:
             - snapsec_network_prod
 
     vm:
         image: ghcr.io/faizanalibhat/vm:master
+        restart: unless-stopped
         env_file: .env
         mem_limit: 4g
         cpus: 3
@@ -250,15 +256,14 @@ services:
             - ./keys:/app/keys
             - snapsec_data:/data
         depends_on:
-            mongodb:
-                condition: service_healthy
-            redis:
-                condition: service_healthy
+            - mongodb
+            - redis
         networks:
             - snapsec_network_prod
 
     gotenberg:
         image: gotenberg/gotenberg:8
+        restart: unless-stopped
         env_file: .env
         mem_limit: 2g
         cpus: 2
