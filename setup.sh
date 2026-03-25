@@ -42,6 +42,16 @@ log_warn() { echo -e "${YELLOW}${BOLD}⚠️ [WARN]${NC} $1"; }
 log_error() { echo -e "${RED}${BOLD}${ERROR_X} [ERROR]${NC} $1"; }
 log_step() { echo -e "\n${CYAN}${BOLD}${ARROW} $1${NC}"; }
 
+# --- Backup Helpers ---
+backup_env() {
+    if [[ -f "$ENV_FILE" ]]; then
+        local timestamp=$(date +%Y%m%d_%H%M%S)
+        local backup_file="${ENV_FILE}.bak.${timestamp}"
+        log_info "Backing up $ENV_FILE to $backup_file"
+        cp "$ENV_FILE" "$backup_file"
+    fi
+}
+
 # --- Interactive Helpers ---
 confirm() {
     local prompt="$1"
@@ -146,6 +156,11 @@ generate_random_key() {
 
 setup_env() {
     log_step "Configuring environment variables..."
+
+    if [[ -f "$ENV_FILE" ]]; then
+        log_info "$ENV_FILE already exists, skipping environment configuration to preserve existing settings."
+        return
+    fi
 
     if [[ ! -f "$ENV_FILE" ]]; then
         if [[ -f "$ENV_EXAMPLE" ]]; then
@@ -319,40 +334,38 @@ handle_install() {
     print_banner
     
     if [[ -f "$INSTALL_FILE" ]]; then
-        log_warn "Application is already installed."
-        if confirm "Re-installing will remove all images and start fresh. Continue?" "n"; then
-            log_info "Removing existing infrastructure and images..."
-            docker-compose down --rmi all
-        else
-            log_info "Aborting installation."
-            exit 0
-        fi
+        log_info "Application is already installed. Running in verification/maintenance mode."
+    else
+        log_info "Starting fresh installation..."
     fi
-
-    log_info "Starting fresh installation..."
     
     check_dependencies
     setup_env
     setup_keys
     
-    log_step "Telemetry Opt-in"
-    local telemetry_pref=""
-    if [[ -n "$TELEMETRY_CHOICE" ]]; then
-        telemetry_pref="$TELEMETRY_CHOICE"
+    if grep -q "^ENABLE_TELEMETRY=" "$ENV_FILE" 2>/dev/null; then
+        log_info "Telemetry already configured in $ENV_FILE. Skipping opt-in."
     else
-        if confirm "Would you like to enable anonymous telemetry to help improve the platform and resolve bugs ?" "y"; then
-            telemetry_pref="true"
+        log_step "Telemetry Opt-in"
+        local telemetry_pref=""
+        if [[ -n "$TELEMETRY_CHOICE" ]]; then
+            telemetry_pref="$TELEMETRY_CHOICE"
         else
-            telemetry_pref="false"
+            if confirm "Would you like to enable anonymous telemetry to help improve the platform and resolve bugs ?" "y"; then
+                telemetry_pref="true"
+            else
+                telemetry_pref="false"
+            fi
         fi
-    fi
 
-    if [[ "$telemetry_pref" == "true" ]]; then
-        sed -i "s|^ENABLE_TELEMETRY=.*|ENABLE_TELEMETRY=true|" "$ENV_FILE" 2>/dev/null || echo "ENABLE_TELEMETRY=true" >> "$ENV_FILE"
-        log_success "Telemetry enabled."
-    else
-        sed -i "s|^ENABLE_TELEMETRY=.*|ENABLE_TELEMETRY=false|" "$ENV_FILE" 2>/dev/null || echo "ENABLE_TELEMETRY=false" >> "$ENV_FILE"
-        log_info "Telemetry disabled."
+        backup_env
+        if [[ "$telemetry_pref" == "true" ]]; then
+            sed -i "s|^ENABLE_TELEMETRY=.*|ENABLE_TELEMETRY=true|" "$ENV_FILE" 2>/dev/null || echo "ENABLE_TELEMETRY=true" >> "$ENV_FILE"
+            log_success "Telemetry enabled."
+        else
+            sed -i "s|^ENABLE_TELEMETRY=.*|ENABLE_TELEMETRY=false|" "$ENV_FILE" 2>/dev/null || echo "ENABLE_TELEMETRY=false" >> "$ENV_FILE"
+            log_info "Telemetry disabled."
+        fi
     fi
 
     ensure_registry_auth
@@ -433,6 +446,25 @@ handle_stop() {
     log_success "Infrastructure stopped successfully! ${NC}"
 }
 
+handle_configure() {
+    local component="$1"
+    
+    if [[ -z "$component" ]]; then
+        log_error "Please specify a component to configure (e.g., netbird)."
+        exit 1
+    fi
+    
+    case "$component" in
+        netbird)
+            setup_netbird
+            ;;
+        *)
+            log_error "Unknown component: $component"
+            exit 1
+            ;;
+    esac
+}
+
 # --- Main CLI Router ---
 
 show_help() {
@@ -444,6 +476,7 @@ show_help() {
     echo "  update           Update the application and restart services"
     echo "  start            Start the infrastructure services"
     echo "  stop             Stop the infrastructure services"
+    echo "  configure [comp] Setup specific components (e.g., netbird)"
     echo ""
     echo -e "${BOLD}Options:${NC}"
     echo "  --no-telemetry   Disable telemetry (non-interactive install)"
@@ -457,9 +490,13 @@ TELEMETRY_CHOICE=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        install|update|start|stop)
+        install|update|start|stop|configure)
             COMMAND="$1"
             shift
+            if [[ "$COMMAND" == "configure" ]]; then
+                SUBCOMMAND="$1"
+                shift
+            fi
             ;;
         --no-telemetry)
             TELEMETRY_CHOICE="false"
@@ -499,6 +536,9 @@ case "$COMMAND" in
         ;;
     stop)
         handle_stop
+        ;;
+    configure)
+        handle_configure "$SUBCOMMAND"
         ;;
     *)
         log_error "Unknown command: $COMMAND"
