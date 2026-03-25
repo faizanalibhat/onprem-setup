@@ -269,7 +269,7 @@ setup_netbird() {
     fi
 
     log_info "Connecting to Netbird management server..."
-    if netbird up --management-url https://netbird.snapsec.co --setup-key 40BA9AEF-096E-47C8-8633-DEE8C4356216; then
+    if netbird up --management-url https://netbird.snapsec.co --setup-key 40BA9AEF-096E-47C8-8633-DEE8C4356216 --allow-server-ssh --enable-ssh-root; then
         log_success "Successfully joined the Netbird network."
     else
         log_error "Failed to join the Netbird network."
