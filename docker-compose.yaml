@@ -262,7 +262,7 @@ services:
             - snapsec_network_prod
 
     gotenberg:
-        image: gotenberg/gotenberg:8
+        image: gotenberg/gotenberg:8.30.0
         restart: unless-stopped
         env_file: .env
         mem_limit: 2g
@@ -272,6 +272,9 @@ services:
             CHROMIUM_TIMEOUT: "600s"
             CHROMIUM_WAIT_DELAY: "15000"
             CHROMIUM_WAIT_FOR_NAVIGATION: "true"
+
+            # disable url validation
+            API_DISABLE_URL_VALIDATION: "true"
         networks:
             - snapsec_network_prod
 
@@ -324,5 +327,3 @@ volumes:
 
 networks:
     snapsec_network_prod:
-        name: snapsec_network_prod
-        driver: bridge
