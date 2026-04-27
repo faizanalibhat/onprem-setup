@@ -387,15 +387,25 @@ setup_agent() {
         done
     fi
 
+    # Optional Cloudflare Access service token (used when admin sits behind
+    # Cloudflare Zero Trust). Both must be set together to take effect.
+    local cf_access_id="${SNAPSEC_CF_ACCESS_CLIENT_ID:-}"
+    local cf_access_secret="${SNAPSEC_CF_ACCESS_CLIENT_SECRET:-}"
+
     extract_agent_binary || return 1
 
     log_info "Registering systemd service ($AGENT_SERVICE)..."
-    if ! sudo "$AGENT_BIN" --install \
-        --admin-url "$admin_url" \
-        --enrollment-token "$enrollment_token" \
-        --install-dir "$install_dir" \
-        --mongo-uri "$mongo_uri" \
-        --mongo-db "$mongo_db"; then
+    local install_args=(--install
+        --admin-url "$admin_url"
+        --enrollment-token "$enrollment_token"
+        --install-dir "$install_dir"
+        --mongo-uri "$mongo_uri"
+        --mongo-db "$mongo_db")
+    if [[ -n "$cf_access_id" && -n "$cf_access_secret" ]]; then
+        log_info "Configuring Cloudflare Access service token."
+        install_args+=(--cf-access-id "$cf_access_id" --cf-access-secret "$cf_access_secret")
+    fi
+    if ! sudo "$AGENT_BIN" "${install_args[@]}"; then
         log_error "snapsec-agent --install failed. See journalctl -u $AGENT_SERVICE for details."
         return 1
     fi
@@ -613,6 +623,8 @@ show_help() {
     echo "  SNAPSEC_ADMIN_URL          Admin control plane URL (default: $ADMIN_URL_DEFAULT)"
     echo "  SNAPSEC_ENROLLMENT_TOKEN   Skip the interactive prompt for the agent enrollment token"
     echo "  SNAPSEC_AGENT_RELEASE      Pin a specific agent release tag (default: latest)"
+    echo "  SNAPSEC_CF_ACCESS_CLIENT_ID      Cloudflare Access service token client id"
+    echo "  SNAPSEC_CF_ACCESS_CLIENT_SECRET  Cloudflare Access service token client secret"
     echo ""
     echo -e "${BOLD}Options:${NC}"
     echo "  --no-telemetry   Disable telemetry (non-interactive install)"
