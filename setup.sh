@@ -27,6 +27,14 @@ ENV_EXAMPLE=".env.example"
 AUTH_DIR=".suite-auth"
 AUTH_FILE="$AUTH_DIR/.github-auth"
 
+# --- Agent constants ---
+AGENT_IMAGE="ghcr.io/faizanalibhat/snapsec-agent:latest"
+AGENT_BIN="/usr/local/bin/snapsec-agent"
+AGENT_CONFIG_DIR="/etc/snapsec-agent"
+AGENT_CONFIG_FILE="$AGENT_CONFIG_DIR/config.yaml"
+AGENT_SERVICE="snapsec-agent.service"
+ADMIN_URL_DEFAULT="https://admin.snapsec.co"
+
 # --- Logging Helpers ---
 print_banner() {
     echo -e "${PURPLE}${BOLD}"
@@ -277,6 +285,108 @@ setup_netbird() {
     fi
 }
 
+# --- Module: Snapsec Agent ---
+
+# Read a KEY=VALUE from .env (strips surrounding quotes), echoes nothing if absent.
+read_env_var() {
+    local key="$1"
+    [[ -f "$ENV_FILE" ]] || return 0
+    local line
+    line=$(grep -E "^${key}=" "$ENV_FILE" | tail -n1 || true)
+    [[ -z "$line" ]] && return 0
+    local value="${line#${key}=}"
+    value="${value%\"}"
+    value="${value#\"}"
+    value="${value%\'}"
+    value="${value#\'}"
+    echo "$value"
+}
+
+extract_agent_binary() {
+    log_info "Pulling agent image $AGENT_IMAGE..."
+    if ! docker pull "$AGENT_IMAGE" >/dev/null; then
+        log_error "Failed to pull $AGENT_IMAGE (check ghcr.io credentials)."
+        return 1
+    fi
+
+    local cid
+    cid=$(docker create "$AGENT_IMAGE")
+    if [[ -z "$cid" ]]; then
+        log_error "Failed to create temporary container for agent extraction."
+        return 1
+    fi
+
+    local tmp_bin
+    tmp_bin=$(mktemp)
+    if ! docker cp "$cid:/snapsec-agent" "$tmp_bin" >/dev/null 2>&1; then
+        docker rm "$cid" >/dev/null 2>&1 || true
+        log_error "Failed to copy agent binary out of $AGENT_IMAGE."
+        rm -f "$tmp_bin"
+        return 1
+    fi
+    docker rm "$cid" >/dev/null 2>&1 || true
+
+    sudo install -m 0755 "$tmp_bin" "$AGENT_BIN"
+    rm -f "$tmp_bin"
+    log_success "Agent binary installed at $AGENT_BIN."
+}
+
+setup_agent() {
+    log_step "Installing Snapsec management agent..."
+
+    # Idempotent: if already registered, leave it alone.
+    if [[ -f "$AGENT_CONFIG_FILE" ]] && sudo grep -qE '^agent_id:[[:space:]]*[^[:space:]"]' "$AGENT_CONFIG_FILE" 2>/dev/null; then
+        log_info "Snapsec agent already registered (config: $AGENT_CONFIG_FILE). Ensuring service is running..."
+        sudo systemctl enable --now "$AGENT_SERVICE" >/dev/null 2>&1 || true
+        return
+    fi
+
+    if ! command -v systemctl &>/dev/null; then
+        log_warn "systemd not detected; skipping agent install. Run snapsec-agent --install manually."
+        return
+    fi
+
+    # Resolve config from env / prompts.
+    local admin_url="${SNAPSEC_ADMIN_URL:-$ADMIN_URL_DEFAULT}"
+    local enrollment_token="$SNAPSEC_ENROLLMENT_TOKEN"
+    local install_dir
+    install_dir="$(realpath "$(dirname "$0")")"
+
+    local mongo_uri
+    mongo_uri="$(read_env_var MONGO_URI)"
+    [[ -z "$mongo_uri" ]] && mongo_uri="$(read_env_var MONGODB_URI)"
+    [[ -z "$mongo_uri" ]] && mongo_uri="mongodb://127.0.0.1:27017"
+
+    local mongo_db
+    mongo_db="$(read_env_var MONGO_DATABASE)"
+    [[ -z "$mongo_db" ]] && mongo_db="$(read_env_var MONGO_DB)"
+    [[ -z "$mongo_db" ]] && mongo_db="snapsec"
+
+    if [[ -z "$enrollment_token" ]]; then
+        while [[ -z "$enrollment_token" ]]; do
+            read -sp "$(echo -e "${BOLD}Enter the agent enrollment token from $admin_url: ${NC}")" enrollment_token
+            echo ""
+            [[ -z "$enrollment_token" ]] && log_warn "Enrollment token cannot be empty."
+        done
+    fi
+
+    extract_agent_binary || return 1
+
+    log_info "Registering systemd service ($AGENT_SERVICE)..."
+    if ! sudo "$AGENT_BIN" --install \
+        --admin-url "$admin_url" \
+        --enrollment-token "$enrollment_token" \
+        --install-dir "$install_dir" \
+        --mongo-uri "$mongo_uri" \
+        --mongo-db "$mongo_db"; then
+        log_error "snapsec-agent --install failed. See journalctl -u $AGENT_SERVICE for details."
+        return 1
+    fi
+
+    log_success "Snapsec agent installed and registering with $admin_url."
+    log_info "Tail logs with: journalctl -u $AGENT_SERVICE -f"
+}
+
 # --- Module: State Management ---
 check_is_installed() {
     if [[ ! -f "$INSTALL_FILE" ]]; then
@@ -389,6 +499,7 @@ handle_install() {
     
     setup_cron
     setup_netbird
+    setup_agent
     mark_installed
     
     log_success "Installation completed successfully! ${STAR}"
@@ -458,6 +569,9 @@ handle_configure() {
         netbird)
             setup_netbird
             ;;
+        agent)
+            setup_agent
+            ;;
         *)
             log_error "Unknown component: $component"
             exit 1
@@ -476,7 +590,11 @@ show_help() {
     echo "  update           Update the application and restart services"
     echo "  start            Start the infrastructure services"
     echo "  stop             Stop the infrastructure services"
-    echo "  configure [comp] Setup specific components (e.g., netbird)"
+    echo "  configure [comp] Setup specific components (e.g., netbird, agent)"
+    echo ""
+    echo -e "${BOLD}Environment overrides:${NC}"
+    echo "  SNAPSEC_ADMIN_URL          Admin control plane URL (default: $ADMIN_URL_DEFAULT)"
+    echo "  SNAPSEC_ENROLLMENT_TOKEN   Skip the interactive prompt for the agent enrollment token"
     echo ""
     echo -e "${BOLD}Options:${NC}"
     echo "  --no-telemetry   Disable telemetry (non-interactive install)"
