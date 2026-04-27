@@ -28,12 +28,15 @@ AUTH_DIR=".suite-auth"
 AUTH_FILE="$AUTH_DIR/.github-auth"
 
 # --- Agent constants ---
-AGENT_IMAGE="ghcr.io/faizanalibhat/snapsec-agent:latest"
 AGENT_BIN="/usr/local/bin/snapsec-agent"
 AGENT_CONFIG_DIR="/etc/snapsec-agent"
 AGENT_CONFIG_FILE="$AGENT_CONFIG_DIR/config.yaml"
 AGENT_SERVICE="snapsec-agent.service"
 ADMIN_URL_DEFAULT="https://admin.snapsec.co"
+# GitHub release used to fetch the agent binary. Override with
+# SNAPSEC_AGENT_RELEASE=vX.Y.Z to pin a specific version.
+AGENT_REPO="faizanalibhat/updater"
+AGENT_RELEASE_DEFAULT="latest"
 
 # --- Logging Helpers ---
 print_banner() {
@@ -303,32 +306,46 @@ read_env_var() {
 }
 
 extract_agent_binary() {
-    log_info "Pulling agent image $AGENT_IMAGE..."
-    if ! docker pull "$AGENT_IMAGE" >/dev/null; then
-        log_error "Failed to pull $AGENT_IMAGE (check ghcr.io credentials)."
-        return 1
+    # Resolve target arch.
+    local arch
+    case "$(uname -m)" in
+        x86_64|amd64)   arch="amd64" ;;
+        aarch64|arm64)  arch="arm64" ;;
+        *)
+            log_error "Unsupported CPU arch: $(uname -m). Build snapsec-agent manually and place it at $AGENT_BIN."
+            return 1
+            ;;
+    esac
+
+    local release="${SNAPSEC_AGENT_RELEASE:-$AGENT_RELEASE_DEFAULT}"
+    local asset="snapsec-agent_linux_${arch}"
+    local url
+    if [[ "$release" == "latest" ]]; then
+        url="https://github.com/${AGENT_REPO}/releases/latest/download/${asset}"
+    else
+        url="https://github.com/${AGENT_REPO}/releases/download/${release}/${asset}"
     fi
 
-    local cid
-    cid=$(docker create "$AGENT_IMAGE")
-    if [[ -z "$cid" ]]; then
-        log_error "Failed to create temporary container for agent extraction."
-        return 1
-    fi
-
+    log_info "Downloading agent binary ($asset @ $release)..."
     local tmp_bin
     tmp_bin=$(mktemp)
-    if ! docker cp "$cid:/snapsec-agent" "$tmp_bin" >/dev/null 2>&1; then
-        docker rm "$cid" >/dev/null 2>&1 || true
-        log_error "Failed to copy agent binary out of $AGENT_IMAGE."
+    if ! curl -fsSL "$url" -o "$tmp_bin"; then
+        log_error "Failed to download $url"
+        log_info "If the release is private, set GITHUB_TOKEN and re-run, or build the agent manually."
         rm -f "$tmp_bin"
         return 1
     fi
-    docker rm "$cid" >/dev/null 2>&1 || true
+
+    # Sanity check: should be an ELF binary, not an HTML 404 page.
+    if ! head -c 4 "$tmp_bin" | grep -q $'\x7fELF'; then
+        log_error "Downloaded file is not a Linux binary (got $(file -b "$tmp_bin" 2>/dev/null || echo unknown))."
+        rm -f "$tmp_bin"
+        return 1
+    fi
 
     sudo install -m 0755 "$tmp_bin" "$AGENT_BIN"
     rm -f "$tmp_bin"
-    log_success "Agent binary installed at $AGENT_BIN."
+    log_success "Agent binary installed at $AGENT_BIN ($("$AGENT_BIN" --version 2>/dev/null || echo unknown))."
 }
 
 setup_agent() {
@@ -595,6 +612,7 @@ show_help() {
     echo -e "${BOLD}Environment overrides:${NC}"
     echo "  SNAPSEC_ADMIN_URL          Admin control plane URL (default: $ADMIN_URL_DEFAULT)"
     echo "  SNAPSEC_ENROLLMENT_TOKEN   Skip the interactive prompt for the agent enrollment token"
+    echo "  SNAPSEC_AGENT_RELEASE      Pin a specific agent release tag (default: latest)"
     echo ""
     echo -e "${BOLD}Options:${NC}"
     echo "  --no-telemetry   Disable telemetry (non-interactive install)"
