@@ -379,6 +379,10 @@ setup_agent() {
     [[ -z "$mongo_db" ]] && mongo_db="$(read_env_var MONGO_DB)"
     [[ -z "$mongo_db" ]] && mongo_db="snapsec"
 
+    # Public-facing URL of this on-prem instance (set during install/update).
+    local base_url
+    base_url="$(read_env_var BASE_URL)"
+
     if [[ -z "$enrollment_token" ]]; then
         while [[ -z "$enrollment_token" ]]; do
             read -sp "$(echo -e "${BOLD}Enter the agent enrollment token from $admin_url: ${NC}")" enrollment_token
@@ -401,6 +405,9 @@ setup_agent() {
         --install-dir "$install_dir"
         --mongo-uri "$mongo_uri"
         --mongo-db "$mongo_db")
+    if [[ -n "$base_url" ]]; then
+        install_args+=(--base-url "$base_url")
+    fi
     if [[ -n "$cf_access_id" && -n "$cf_access_secret" ]]; then
         log_info "Configuring Cloudflare Access service token."
         install_args+=(--cf-access-id "$cf_access_id" --cf-access-secret "$cf_access_secret")
