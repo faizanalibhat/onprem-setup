@@ -263,30 +263,6 @@ setup_cron() {
     fi
 }
 
-# --- Module: Netbird Setup ---
-setup_netbird() {
-    log_step "Configuring Netbird Connectivity..."
-    
-    if command -v netbird &> /dev/null; then
-        log_info "Netbird agent is already installed."
-    else
-        log_info "Installing Netbird agent..."
-        if curl -fsSL https://pkgs.netbird.io/install.sh | sh; then
-            log_success "Netbird agent installed successfully."
-        else
-            log_error "Failed to install Netbird agent."
-            exit 1
-        fi
-    fi
-
-    log_info "Connecting to Netbird management server..."
-    if netbird up --management-url https://netbird.snapsec.co --setup-key 40BA9AEF-096E-47C8-8633-DEE8C4356216 --allow-server-ssh --enable-ssh-root; then
-        log_success "Successfully joined the Netbird network."
-    else
-        log_error "Failed to join the Netbird network."
-        exit 1
-    fi
-}
 
 # --- Module: Snapsec Agent ---
 
@@ -532,7 +508,6 @@ handle_install() {
     fi
     
     setup_cron
-    setup_netbird
     setup_agent
     mark_installed
     
@@ -595,14 +570,11 @@ handle_configure() {
     local component="$1"
     
     if [[ -z "$component" ]]; then
-        log_error "Please specify a component to configure (e.g., netbird)."
+        log_error "Please specify a component to configure (e.g., agent)."
         exit 1
     fi
     
     case "$component" in
-        netbird)
-            setup_netbird
-            ;;
         agent)
             setup_agent
             ;;
@@ -624,7 +596,7 @@ show_help() {
     echo "  update           Update the application and restart services"
     echo "  start            Start the infrastructure services"
     echo "  stop             Stop the infrastructure services"
-    echo "  configure [comp] Setup specific components (e.g., netbird, agent)"
+    echo "  configure [comp] Setup specific components (e.g., agent)"
     echo ""
     echo -e "${BOLD}Environment overrides:${NC}"
     echo "  SNAPSEC_ADMIN_URL          Admin control plane URL (default: $ADMIN_URL_DEFAULT)"
