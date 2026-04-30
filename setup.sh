@@ -128,7 +128,7 @@ install_dependency() {
 check_dependencies() {
     log_step "Verifying system requirements..."
     
-    local deps=("docker" "docker-compose" "openssl" "crontab")
+    local deps=("docker" "docker-compose" "openssl" "crontab" "curl")
     local missing_deps=()
 
     for dep in "${deps[@]}"; do
@@ -439,10 +439,19 @@ ensure_registry_auth() {
         chmod 600 "$AUTH_FILE" # Protect the token file
     else
         log_error "Failed to authenticate with ghcr.io. Please check your token."
-        # If it failed with a cached token, clear it so we re-prompt next time
+        # If it failed with a cached token, clear it only if the API confirms it's invalid
         if [[ -f "$AUTH_FILE" ]]; then
-            rm "$AUTH_FILE"
-            log_info "Cached token was invalid and has been removed."
+            log_info "Verifying token validity..."
+            local status_code
+            status_code=$(curl -s -o /dev/null -w "%{http_code}" -u "faizanalibhat:$github_token" https://ghcr.io/v2/)
+            
+            if [[ "$status_code" == "401" ]]; then
+                rm "$AUTH_FILE"
+                log_info "Cached token was invalid (401 Unauthorized) and has been removed."
+            else
+                log_warn "Authentication failed but token verification returned status $status_code."
+                log_info "Preserving cached token as this may be a transient network or registry issue."
+            fi
         fi
         exit 1
     fi
